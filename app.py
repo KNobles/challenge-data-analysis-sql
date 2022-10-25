@@ -29,12 +29,13 @@ def run_query():
 sqlite_connection = sqlite3.connect("bce.db")
 
 cursor = sqlite_connection.cursor()
-a = cursor.execute("select JuridicalForm, count(JuridicalForm) from enterprise group by JuridicalForm;")
+a = cursor.execute("select JuridicalForm as 'form', count(JuridicalForm) as 'count' from enterprise group by JuridicalForm;")
 cols = [column[0] for column in a.description]
 # print(a.fetchall())
 juridical = a.fetchall()
 juridical.remove(juridical[0])
 recs = pd.DataFrame.from_records(data=juridical, columns=cols)
-st.dataframe(recs)
+# st.dataframe(recs)
 
-st.write(sqlite_connection)
+# st.write(sqlite_connection)
+st.bar_chart(data=recs, x="form", y="count")
