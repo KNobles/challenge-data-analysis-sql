@@ -2,6 +2,7 @@ import os
 import sqlite3
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 
 
 def create_connection(db_file: str):
@@ -17,25 +18,55 @@ def run_query():
     sqlite_dbs = [file for file in os.listdir(".") if file.endswith(".db")]
     db_filename = st.selectbox("Database File", sqlite_dbs)
 
-    qery = st.text_area("SQL query", height=50)
-    conn = create_connection(db_filename)
+    query = st.text_area("SQL query", height=50)
+    conn = create_connection("bce.db")
 
     submitted = st.button("submit")
     
     if submitted:
-        pass
-    pass
+        try:
+            query = conn.execute(query)
+            cols = [column[0] for column in query.description]
+            results_df = pd.DataFrame.from_records(
+                data = query.fetchall(), 
+                columns = cols
+            )
+            st.dataframe(results_df)
+        except Exception as e:
+            st.write(e)
+
+    st.sidebar.markdown("# Run Query")
 
 sqlite_connection = sqlite3.connect("bce.db")
 
-cursor = sqlite_connection.cursor()
-a = cursor.execute("select JuridicalForm as 'form', count(JuridicalForm) as 'count' from enterprise group by JuridicalForm;")
-cols = [column[0] for column in a.description]
-# print(a.fetchall())
-juridical = a.fetchall()
-juridical.remove(juridical[0])
-recs = pd.DataFrame.from_records(data=juridical, columns=cols)
-# st.dataframe(recs)
+def form_percentage():
+    cursor = create_connection("bce.db").cursor()
+    form_list = cursor.execute("""
+            SELECT form,SUM(count) count
+            FROM
+            (
+                SELECT CASE WHEN COUNT(*) > 50000 THEN JuridicalForm ELSE 'others' 
+                END form, COUNT(*) count 
+                FROM enterprise 
+                GROUP BY JuridicalForm
+            )
+            GROUP BY form
+            ORDER BY form = 'others', count;
+            """)
+    cols = [column[0] for column in form_list.description]
+    forms = form_list.fetchall()
+    forms.remove(forms[0])
 
-# st.write(sqlite_connection)
-st.bar_chart(data=recs, x="form", y="count")
+    df_form = pd.DataFrame.from_records(data=forms, columns=cols)
+
+    fig = px.pie(df_form, values='count', names='form', title='Percentage of form')
+    st.plotly_chart(fig)
+
+# st.bar_chart(data=recs, x="form", y="count")
+
+pages = {
+    "Run Query" : run_query(),
+    "Forms percentages" : form_percentage(),
+}
+
+selected_page = st.sidebar.selectbox("Select a page", pages.keys())
