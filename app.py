@@ -98,10 +98,27 @@ def get_enterprise_type():
         """)
     make_pie_chart(query=enterprise_type_query, markdown_text=markdown, pie_legend_labels="type", pie_values="type_count")
 
+def get_company_age_avg():
+    age_avg_query = get_cursor().execute("""
+    SELECT activity.*, enterprise.StartDate, 
+    DATETIME("now") - enterprise.StartDate as age,
+    ROUND(AVG(DATETIME("now") - enterprise.StartDate),2) AS "age_average" 
+    FROM activity 
+    INNER JOIN enterprise 
+    ON activity.EntityNumber = enterprise.EnterpriseNumber 
+    GROUP BY activity.NaceCode ORDER BY age_average ASC;
+    """)
+    cols = get_column_names(age_avg_query)
+    age_avg_list = age_avg_query.fetchall()
+    df_age_avg = pd.DataFrame.from_records(data=age_avg_list, columns=cols)
+    fig = px.bar(data_frame=df_age_avg, x="NaceCode", y="age_average")
+    st.plotly_chart(fig)
+
 pages = {
     "Forms percentages" : get_juridical_form,
     "Status percentages" : get_company_status,
     "Enterprise type percentages": get_enterprise_type,
+    "Company's nace code age average": get_company_age_avg,
 }
 
 selected_page = st.sidebar.selectbox("Select a page", pages.keys())
