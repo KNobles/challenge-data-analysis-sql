@@ -13,10 +13,16 @@ def create_connection(db_file: str):
         st.write(e)
     return sqlite_connection
 
-def get_form():
+def get_cursor():
+    return create_connection("bce.db").cursor()
+
+def get_column_names(query_cursor: sqlite3.Cursor):
+    return [column[0] for column in query_cursor.description]
+
+def get_juridical_form():
     st.markdown("# Percentage of juridical form in enterprises")
-    cursor = create_connection("bce.db").cursor()
-    form_list = cursor.execute("""
+    cursor = get_cursor()
+    form_query = cursor.execute("""
             SELECT form,SUM(count) count
             FROM
             (
@@ -28,47 +34,59 @@ def get_form():
             GROUP BY form
             ORDER BY form = 'others', count;
             """)
-    cols = [column[0] for column in form_list.description]
-    forms = form_list.fetchall()
+    cols = get_column_names(form_query)
+    forms = form_query.fetchall()
     df_form = pd.DataFrame.from_records(data=forms, columns=cols)
     df_form.loc[df_form["form"].astype(str) == "None", "form"] = "Null"
-    # print(df_form["form"].values)
-    # fig = px.pie(df_form, values='count', names='form', title='Percentage of form')
-    pull_arr = [0] * len(df_form["form"])
-    # print(pull_arr)
-    # print(df_form.loc[(df_form["count"] == df_form["count"].max()) & (df_form["form"] != "Null")])
-    # print(df_form.max())
     fig = go.Figure(data=[go.Pie(labels=df_form['form'].values, values=df_form['count'].values, pull=[0,0,0,0,0,0,0.1,0])])
     st.plotly_chart(fig)
 
-# st.bar_chart(data=recs, x="form", y="count")
-
 def get_company_status():
-    cursor = create_connection("bce.db").cursor()
-    comp_status = cursor.execute("""
+    cursor = get_cursor()
+    company_status_query = cursor.execute("""
     SELECT enterprise.Status,
     CASE WHEN DATETIME("now") > address.DateStrikingOff
         THEN "STRIKED OFF"
         WHEN DATETIME("now") < address.DateStrikingOff
         THEN "LIQUIDATION"
         ELSE "NO STRIKE" 
-    END AS strike, count(*) as strike_count from address
+    END AS strike, COUNT(*) as strike_count from address
     INNER JOIN enterprise ON address.EntityNumber = enterprise.EnterpriseNumber group by strike;
     """)
-    cols = [column[0] for column in comp_status.description]
-    statuses = comp_status.fetchall()
+    cols = get_column_names(company_status_query)
+    statuses = company_status_query.fetchall()
     df_status = pd.DataFrame.from_records(statuses, columns=cols)
-    pull = [0] * len(df_status)
-    pull[df_status["strike_count"].idxmax()] = 0.2
-    print(df_status['strike'].values)
-    fig = go.Figure(data=[go.Pie(labels=df_status['strike'].values, values=df_status['strike_count'].values, pull=pull, hole=0.4)])
+    pull_sector = [0] * len(df_status)
+    pull_sector[df_status["strike_count"].idxmax()] = 0.2
+    fig = go.Figure(data=[go.Pie(labels=df_status['strike'].values, values=df_status['strike_count'].values, pull=pull_sector, hole=0.4)])
     fig.update_layout(width=800, height=800, font=dict(size=18))
     st.plotly_chart(fig)
-    # print(df_status["strike_count"].idxmax())
+
+def get_enterprise_type():
+    cursor = get_cursor()
+    # THIS IS NOT FOR SURE GOOD I NEED TO DO ANOTHER QUERY
+    # TO CONFIRM IF THE TYPE NUMBER CORRESPOND THE TEXT I PUT IN
+    enterprise_type_query = cursor.execute("""
+    SELECT CASE 
+    WHEN TypeOfEnterprise = 1
+        THEN "Moral person" 
+    WHEN TypeOfEnterprise = 2
+        THEN "Physical person"
+        ELSE "Other"
+    END AS type, COUNT(TypeOfEnterprise) as count FROM enterprise 
+    GROUP BY TypeOfEnterprise;
+    """)
+    cols = get_column_names(enterprise_type_query)
+    enterprise_types = enterprise_type_query.fetchall()
+    df_type = pd.DataFrame.from_records(enterprise_types, columns=cols)
+    fig = px.pie(data_frame=df_type, values="count", names="type")
+    st.plotly_chart(fig)
+    # fig = go.Figure(data=[go.Pie(labels=df_status["type"].values, values=df_status['count'].values)])
 
 pages = {
-    "Forms percentages" : get_form,
+    "Forms percentages" : get_juridical_form,
     "Status percentages" : get_company_status,
+    "Enterprise type percentages": get_enterprise_type,
 }
 
 selected_page = st.sidebar.selectbox("Select a page", pages.keys())
