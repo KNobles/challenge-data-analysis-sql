@@ -38,10 +38,15 @@ def get_juridical_form():
     forms = form_query.fetchall()
     df_form = pd.DataFrame.from_records(data=forms, columns=cols)
     df_form.loc[df_form["form"].astype(str) == "None", "form"] = "Null"
-    fig = go.Figure(data=[go.Pie(labels=df_form['form'].values, values=df_form['count'].values, pull=[0,0,0,0,0,0,0.1,0])])
+    ind = df_form.groupby("form").filter(lambda x: x["form"] != "Null")["count"].idxmax()
+    pull_sector = [0] * len(df_form)
+    pull_sector[ind] = 0.2
+    fig = go.Figure(data=[go.Pie(labels=df_form['form'].values, values=df_form['count'].values, pull=pull_sector)])
+    fig.update_layout(width=800, height=800, font_size=20)
     st.plotly_chart(fig)
 
 def get_company_status():
+    st.markdown("# Percentage of statuses in companies")
     cursor = get_cursor()
     company_status_query = cursor.execute("""
     SELECT enterprise.Status,
@@ -59,29 +64,29 @@ def get_company_status():
     pull_sector = [0] * len(df_status)
     pull_sector[df_status["strike_count"].idxmax()] = 0.2
     fig = go.Figure(data=[go.Pie(labels=df_status['strike'].values, values=df_status['strike_count'].values, pull=pull_sector, hole=0.4)])
-    fig.update_layout(width=800, height=800, font=dict(size=18))
+    fig.update_layout(width=800, height=800, font_size=20)
     st.plotly_chart(fig)
 
 def get_enterprise_type():
     cursor = get_cursor()
-    # THIS IS NOT FOR SURE GOOD I NEED TO DO ANOTHER QUERY
-    # TO CONFIRM IF THE TYPE NUMBER CORRESPOND THE TEXT I PUT IN
+    st.markdown("# Percentage of type of enterprise")
+    # Apparently a Natural Person doesn't have a JuridicalForm
     enterprise_type_query = cursor.execute("""
     SELECT CASE 
     WHEN TypeOfEnterprise = 1
-        THEN "Moral person" 
+        THEN "Natural person" 
     WHEN TypeOfEnterprise = 2
-        THEN "Physical person"
+        THEN "Legal person"
         ELSE "Other"
     END AS type, COUNT(TypeOfEnterprise) as count FROM enterprise 
-    GROUP BY TypeOfEnterprise;
+    GROUP BY JuridicalForm;
     """)
     cols = get_column_names(enterprise_type_query)
     enterprise_types = enterprise_type_query.fetchall()
     df_type = pd.DataFrame.from_records(enterprise_types, columns=cols)
     fig = px.pie(data_frame=df_type, values="count", names="type")
+    fig.update_layout(width=800, height=800, font_size=20)
     st.plotly_chart(fig)
-    # fig = go.Figure(data=[go.Pie(labels=df_status["type"].values, values=df_status['count'].values)])
 
 pages = {
     "Forms percentages" : get_juridical_form,
