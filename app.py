@@ -45,6 +45,18 @@ def make_pie_chart(query: sqlite3.Cursor | str, markdown_text: str, pie_legend_l
 
 def get_juridical_form():
     st.markdown("# Percentage of juridical form in enterprises")
+    # form_second_query = get_cursor().execute("""
+    #     SELECT form, coalesce(code.Description, "NULL") as Description, SUM(count) count
+    #     FROM
+    #     (
+    #         SELECT CASE WHEN COUNT(*) > 50000 THEN JuridicalForm ELSE 'others'
+    #         END form, COUNT(*) count
+    #         FROM enterprise
+    #         GROUP BY JuridicalForm
+    #     )
+    #     LEFT JOIN code on form = code.Code and code.Language = "FR" GROUP BY form
+    #     ORDER BY form = 'others', count;
+    #     """)
     form_query = get_cursor().execute("""
         SELECT form,SUM(count) count
         FROM
@@ -60,13 +72,18 @@ def get_juridical_form():
     cols = get_column_names(form_query)
     forms = form_query.fetchall()
     df_form = pd.DataFrame.from_records(data=forms, columns=cols)
-    df_form.loc[df_form["form"].astype(str) == "None", "form"] = "NULL"
-    ind = df_form.groupby("form").filter(lambda x: x["form"] != "NULL")["count"].idxmax()
+    df_form.loc[df_form["form"].astype(str) == "None", "form"] = "None"
+    ind = df_form.groupby("form").filter(lambda x: x["form"] != "None")["count"].idxmax()
     pull_sector = [0] * len(df_form)
     pull_sector[ind] = 0.2
     fig = go.Figure(data=[go.Pie(labels=df_form['form'].values, values=df_form['count'].values, pull=pull_sector)])
     fig.update_layout(width=800, height=800, font_size=20, hoverlabel_font_size=20)
     st.plotly_chart(fig)
+    percentage = ((df_form["count"] / df_form["count"].sum()) * 100)
+    df_form.insert(loc=2, column="percentage", value=percentage)
+    df_form["percentage"] = df_form["percentage"].round(2)
+    print(df_form)
+    st.table(data=df_form)
 
 def get_company_status():
     markdown = "# Percentage of statuses in companies"
@@ -100,18 +117,19 @@ def get_enterprise_type():
 
 def get_company_age_avg():
     age_avg_query = get_cursor().execute("""
-    SELECT activity.*, enterprise.StartDate, 
+    SELECT activity.*, enterprise.StartDate,
     DATETIME("now") - enterprise.StartDate as age,
-    ROUND(AVG(DATETIME("now") - enterprise.StartDate),2) AS "age_average" 
-    FROM activity 
-    INNER JOIN enterprise 
-    ON activity.EntityNumber = enterprise.EnterpriseNumber 
-    GROUP BY activity.NaceCode ORDER BY age_average ASC;
+    ROUND(AVG(DATETIME("now") - enterprise.StartDate),2) AS "age_average", count(activity.EntityNumber) as "entity_count"
+    FROM activity
+    INNER JOIN enterprise
+    ON activity.EntityNumber = enterprise.EnterpriseNumber
+    GROUP BY activity.NaceCode; 
     """)
     cols = get_column_names(age_avg_query)
     age_avg_list = age_avg_query.fetchall()
     df_age_avg = pd.DataFrame.from_records(data=age_avg_list, columns=cols)
-    fig = px.bar(data_frame=df_age_avg, x="NaceCode", y="age_average")
+    fig = px.bar(data_frame=df_age_avg, x="age_average", y="NaceCode")
+    fig.update_layout(width=800, height=800)
     st.plotly_chart(fig)
 
 pages = {
