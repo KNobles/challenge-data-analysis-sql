@@ -124,16 +124,14 @@ def get_enterprise_type():
     st.markdown("## Legal Person")
     st.markdown("#### Legal Person is being, real or imaginary whom the law regards as capable of rights and duties")
 
-def in_csv():
-    nace_query = get_cursor().execute("""
-    select view_act_ent.*, code.Description from view_act_ent inner join code on view_act_ent.version = Code.Category;
-    """)
-    cols = get_column_names(nace_query)
-    nace_list = nace_query.fetchall()
-    df_nace = pd.DataFrame.from_records(data=nace_list, columns=cols)
-    df_nace.to_csv("nace.csv")
-
 def get_company_age_avg():
+    view_nace_avg = get_cursor().execute("""
+    create view if not exists nace_avg as select activity.EntityNumber, "Nace" || activity.NaceVersion as version, 
+    substr(activity.NaceCode,1,2) as subcode, datetime("now") - enterprise.StartDate as age, 
+    round(avg(datetime("now") - enterprise.StartDate),2) as avg_age, count(*) 
+    from activity inner join enterprise on activity.EntityNumber = enterprise.EnterpriseNumber 
+    group by activity.NaceCode;
+    """)
     age_avg_query = get_cursor().execute("""
     select nace_avg.avg_age, nace_avg.subcode, code.Code, code.Description from nace_avg 
     inner join code on nace_avg.version = code.Category group by nace_avg.avg_age order by nace_avg.subcode;
